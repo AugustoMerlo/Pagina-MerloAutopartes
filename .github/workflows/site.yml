@@ -12,7 +12,6 @@ on:
 
 permissions:
   contents: read
-  deployments: write
 
 concurrency:
   group: site-${{ github.workflow }}-${{ github.ref }}
@@ -24,10 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -37,75 +36,3 @@ jobs:
 
       - name: Validate and build
         run: npm run check
-
-      - name: Upload deployable site
-        uses: actions/upload-artifact@v4
-        with:
-          name: site-dist
-          path: dist/
-          if-no-files-found: error
-          retention-days: 1
-
-  deploy-branch:
-    name: Deploy branch environment
-    needs: validate
-    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'staging')
-    runs-on: ubuntu-latest
-    environment:
-      name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
-    steps:
-      - name: Skip until Cloudflare is configured
-        if: env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '' || env.CLOUDFLARE_PAGES_PROJECT == ''
-        run: echo "Cloudflare secrets/variable are not set; deployment skipped." >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Download validated site
-        if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' && env.CLOUDFLARE_PAGES_PROJECT != ''
-        uses: actions/download-artifact@v4
-        with:
-          name: site-dist
-          path: dist/
-
-      - name: Deploy to Cloudflare Pages
-        if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' && env.CLOUDFLARE_PAGES_PROJECT != ''
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          command: pages deploy dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }} --branch=${{ github.ref_name }}
-
-  deploy-preview:
-    name: Deploy pull request preview
-    needs: validate
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    environment:
-      name: preview
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
-    steps:
-      - name: Skip until Cloudflare is configured
-        if: env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '' || env.CLOUDFLARE_PAGES_PROJECT == ''
-        run: echo "Cloudflare secrets/variable are not set; preview deployment skipped." >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Download validated site
-        if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' && env.CLOUDFLARE_PAGES_PROJECT != ''
-        uses: actions/download-artifact@v4
-        with:
-          name: site-dist
-          path: dist/
-
-      - name: Deploy pull request preview
-        if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' && env.CLOUDFLARE_PAGES_PROJECT != ''
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          command: pages deploy dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }} --branch=pr-${{ github.event.pull_request.number }}
